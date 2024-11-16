@@ -4,12 +4,37 @@
 #pragma once
 
 #include "MatrixMultiplication.h"
+#include "hlslib/xilinx/Stream.h"
 
+// Original ProcessingElement declaration
 void ProcessingElement(Stream<ComputePackN_t> &aIn,
                        Stream<ComputePackN_t> &aOut,
                        Stream<ComputePackM_t> &bIn,
                        Stream<ComputePackM_t> &bOut,
                        Stream<ComputePackM_t> &cOut,
-                       Stream<ComputePackM_t> &cIn, const unsigned locationN,
-                       const unsigned size_n, const unsigned size_k,
+                       Stream<ComputePackM_t> &cIn,
+                       const unsigned locationN,
+                       const unsigned size_n,
+                       const unsigned size_k,
                        const unsigned size_m);
+
+// Tucker configuration structure
+struct TuckerConfig {
+    unsigned batch_size;
+    unsigned in_features;
+    unsigned out_features;
+    unsigned rank1;
+    unsigned rank2;
+    unsigned rank3;
+    unsigned pe_array_size;
+};
+
+// Tucker ProcessingElement declaration
+void TuckerProcessingElement(Stream<ComputePackN_t> &aIn,
+                            Stream<ComputePackN_t> &aOut,
+                            Stream<ComputePackM_t> &bIn,
+                            Stream<ComputePackM_t> &bOut,
+                            Stream<ComputePackM_t> &cOut,
+                            Stream<ComputePackM_t> &cIn,
+                            const unsigned locationN,
+                            const TuckerConfig &config);

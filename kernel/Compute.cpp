@@ -191,41 +191,108 @@ OuterTile_N:
           ++inner;
         }
       }
-
-      // Non-flattened implementation below
-    // WriteC_N1:
-    //   for (unsigned n1 = 0; n1 < kInnerTilesN; ++n1) {
-    //   WriteC_N2:
-    //     for (unsigned n2 = 0; n2 < kComputeTileSizeN; ++n2) {
-    //     WriteC_M1:
-    //       for (unsigned m1 = 0; m1 < kInnerTilesM; ++m1) {
-    //         #pragma HLS PIPELINE II=1
-    //         #pragma HLS LOOP_FLATTEN
-    //         cOut.Push(cBuffer[n1 * kInnerTilesM + m1][n2]);
-    //       }
-    //     }
-    //
-    //     // Forward other tiles of C
-    //     // ----------------------------------------------
-    //     // We send values upwards, so first tile forwards N-1 times, and the
-    //     // last tile forwards 0 times.
-    //     if (locationN < kComputeTilesN - 1) {
-    //     ForwardC_Others:
-    //       for (unsigned l = 0; l < kComputeTilesN - locationN - 1; ++l) {
-    //       ForwardC_N2:
-    //         for (unsigned n2 = 0; n2 < kComputeTileSizeN; ++n2) {
-    //         ForwardC_M1:
-    //           for (unsigned m1 = 0; m1 < kInnerTilesM; ++m1) {
-    //             #pragma HLS PIPELINE II=1
-    //             #pragma HLS LOOP_FLATTEN
-    //             cOut.Push(cIn.Pop());
-    //           }
-    //         }
-    //       }
-    //     }
-    //   }
-
-      // -----------------------------------------------------------------------
     }
   }
+}
+void TuckerProcessingElement(Stream<ComputePackN_t> &aIn,
+                            Stream<ComputePackN_t> &aOut,
+                            Stream<ComputePackM_t> &bIn,
+                            Stream<ComputePackM_t> &bOut,
+                            Stream<ComputePackM_t> &cOut,
+                            Stream<ComputePackM_t> &cIn,
+                            const unsigned locationN,
+                            const TuckerConfig &config) {
+    #pragma HLS INLINE OFF
+    
+    // Double-buffered storage for intermediate results
+    ComputePackM_t intermediate_results[2][kInnerTilesN][kInnerTilesM][kComputeTileSizeN];
+    #pragma HLS ARRAY_PARTITION variable=intermediate_results complete dim=1
+    #pragma HLS ARRAY_PARTITION variable=intermediate_results complete dim=4
+
+    // Stage 1: Mode-1 Product (Input × U1)
+    Mode1_Product: {
+        ProcessingElement(aIn, aOut, bIn, bOut, cOut, cIn,
+                         locationN, config.batch_size, 
+                         config.in_features, config.rank1);
+    }
+
+    // Stage 2: Mode-2 Product (Result × U2)
+    Mode2_Product: {
+        // Buffer for intermediate results from Mode-1
+        ComputePackN_t mode1_buffer[kInnerTilesN];
+        #pragma HLS ARRAY_PARTITION variable=mode1_buffer complete
+
+    Mode2_Outer: for(unsigned n = 0; n < config.batch_size; n++) {
+        Mode2_Inner: for(unsigned k = 0; k < config.rank1; k++) {
+            #pragma HLS PIPELINE II=1
+            
+            // Read intermediate results
+            ComputePackM_t val = cIn.read();
+            
+            // Compute Mode-2 product
+            ComputePackM_t result;
+            Mode2_Compute: for(unsigned m = 0; m < kComputeTileSizeM; m++) {
+                #pragma HLS UNROLL
+                result[m] = OperatorMap::Apply(val[m], bIn.read());
+            }
+            
+            // Store result
+            cOut.write(result);
+        }
+    }}
+
+    // Stage 3: Mode-3 Product (Result × U3)
+    Mode3_Product: {
+        // Double buffering for U3 factor matrix
+        ComputePackM_t U3_buffer[2][kInnerTilesM];
+        #pragma HLS ARRAY_PARTITION variable=U3_buffer complete dim=1
+        
+    Mode3_Outer: for(unsigned n = 0; n < config.batch_size; n++) {
+        Mode3_Middle: for(unsigned k = 0; k < config.rank2; k++) {
+            Mode3_Inner: for(unsigned m = 0; m < config.out_features; m++) {
+                #pragma HLS PIPELINE II=1
+                
+                // Read intermediate results
+                ComputePackM_t val = cIn.read();
+                
+                // Compute Mode-3 product
+                ComputePackM_t result;
+                Mode3_Compute: for(unsigned i = 0; i < kComputeTileSizeM; i++) {
+                    #pragma HLS UNROLL
+                    result[i] = OperatorMap::Apply(val[i], U3_buffer[k%2][i]);
+                }
+                
+                // Write final result
+                cOut.write(result);
+            }
+        }
+    }}
+
+    // Core Tensor Computation
+    CoreTensor_Compute: {
+        // Buffer for core tensor values
+        ComputePackM_t core_buffer[kInnerTilesN][kInnerTilesM];
+        #pragma HLS ARRAY_PARTITION variable=core_buffer complete dim=1
+        
+    Core_Outer: for(unsigned r1 = 0; r1 < config.rank1; r1++) {
+        Core_Middle: for(unsigned r2 = 0; r2 < config.rank2; r2++) {
+            Core_Inner: for(unsigned r3 = 0; r3 < config.rank3; r3++) {
+                #pragma HLS PIPELINE II=1
+                
+                // Read core tensor value
+                ComputePackM_t core_val = bIn.read();
+                
+                // Compute core tensor multiplication
+                ComputePackM_t result;
+                Core_Compute: for(unsigned m = 0; m < kComputeTileSizeM; m++) {
+                    #pragma HLS UNROLL
+                    const auto intermediate = intermediate_results[r1%2][r2][r3][m];
+                    result[m] = OperatorMap::Apply(intermediate, core_val[m]);
+                }
+                
+                // Accumulate result
+                cOut.write(result);
+            }
+        }
+    }}
 }

@@ -1,7 +1,7 @@
 # Vitis 基础路径
-set(VITIS_ROOT "$ENV{HOME}/Xilinx/Vitis/2024.1" CACHE PATH "Path to Vitis installation")
-set(VITIS_HLS_ROOT "$ENV{HOME}/Xilinx/Vitis_HLS/2024.1" CACHE PATH "Path to Vitis HLS installation")
-set(VIVADO_ROOT "$ENV{HOME}/Xilinx/Vivado/2024.1" CACHE PATH "Path to Vivado installation")
+set(VITIS_ROOT "/tools/Xilinx/Vitis/2023.2" CACHE PATH "Path to Vitis installation")
+set(VITIS_HLS_ROOT "/tools/Xilinx/Vitis_HLS/2023.2" CACHE PATH "Path to Vitis HLS installation")
+set(VIVADO_ROOT "/tools/Xilinx/Vivado/2023.2" CACHE PATH "Path to Vivado installation")
 
 # 编译器和工具
 set(Vitis_COMPILER "${VITIS_ROOT}/bin/v++" CACHE FILEPATH "Vitis compiler")
@@ -20,9 +20,9 @@ set(Vitis_FLOATING_POINT_LIBRARY "${VITIS_HLS_ROOT}/lib/lnx64.o/libhlsmath.so" C
 set(Vitis_LIBRARIES "${VITIS_ROOT}/lib/lnx64.o/libxilinxopencl.so" CACHE FILEPATH "Vitis libraries")
 
 # 版本信息
-set(Vitis_VERSION "2024.1" CACHE STRING "Vitis version")
-set(Vitis_MAJOR_VERSION "2024" CACHE STRING "Vitis major version")
-set(Vitis_MINOR_VERSION "1" CACHE STRING "Vitis minor version")
+set(Vitis_VERSION "2023.2" CACHE STRING "Vitis version")
+set(Vitis_MAJOR_VERSION "2023" CACHE STRING "Vitis major version")
+set(Vitis_MINOR_VERSION "2" CACHE STRING "Vitis minor version")
 
 # 使用 Vitis HLS
 set(Vitis_USE_VITIS_HLS ON CACHE BOOL "Use Vitis HLS instead of Vivado HLS")
