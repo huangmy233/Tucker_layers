@@ -5,6 +5,17 @@ cmake_minimum_required(VERSION 3.0)
 project(sdaccel_mm)
 
 include(${CMAKE_SOURCE_DIR}/config.cmake)
+include_directories(
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_BINARY_DIR}
+    ${CMAKE_SOURCE_DIR}/kernel
+)
+
+# 添加源文件
+add_library(kernel
+    ${CMAKE_SOURCE_DIR}/kernel/Compute.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/Memory.cpp
+)
 
 # 设置模块路径
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake
