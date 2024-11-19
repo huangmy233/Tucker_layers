@@ -6,7 +6,6 @@
 #include <cstddef>
 #include <limits>
 #ifdef HLSLIB_SYNTHESIS
-#include <hls_stream.h>
 #else
 #include <condition_variable>
 #include <iostream>
