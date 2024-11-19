@@ -3,26 +3,13 @@
 
 #pragma once
 
-#include "TuckerConfig.h"
 #include "MatrixMultiplication.h"
-#include "hlslib/xilinx/Stream.h"
 
 void ProcessingElement(Stream<ComputePackN_t> &aIn,
-                      Stream<ComputePackN_t> &aOut,
-                      Stream<ComputePackM_t> &bIn,
-                      Stream<ComputePackM_t> &bOut,
-                      Stream<ComputePackM_t> &cOut,
-                      Stream<ComputePackM_t> &cIn,
-                      const unsigned locationN,
-                      const unsigned size_n,
-                      const unsigned size_k,
-                      const unsigned size_m);
-
-void TuckerProcessingElement(Stream<ComputePackN_t> &aIn,
-                           Stream<ComputePackN_t> &aOut,
-                           Stream<ComputePackM_t> &bIn,
-                           Stream<ComputePackM_t> &bOut,
-                           Stream<ComputePackM_t> &cOut,
-                           Stream<ComputePackM_t> &cIn,
-                           const unsigned locationN,
-                           const TuckerConfig &config);
+                       Stream<ComputePackN_t> &aOut,
+                       Stream<ComputePackM_t> &bIn,
+                       Stream<ComputePackM_t> &bOut,
+                       Stream<ComputePackM_t> &cOut,
+                       Stream<ComputePackM_t> &cIn, const unsigned locationN,
+                       const unsigned size_n, const unsigned size_k,
+                       const unsigned size_m);

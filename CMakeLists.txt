@@ -5,22 +5,51 @@ cmake_minimum_required(VERSION 3.0)
 project(sdaccel_mm)
 
 include(${CMAKE_SOURCE_DIR}/config.cmake)
-include_directories(
-    ${CMAKE_SOURCE_DIR}/include
-    ${CMAKE_BINARY_DIR}
-    ${CMAKE_SOURCE_DIR}/kernel
-)
 
-# 添加源文件
-add_library(kernel
-    ${CMAKE_SOURCE_DIR}/kernel/Compute.cpp
-    ${CMAKE_SOURCE_DIR}/kernel/Memory.cpp
+# 设置Vitis HLS路径
+set(VITIS_HLS_ROOT $ENV{XILINX_HLS})
+if(NOT VITIS_HLS_ROOT)
+    message(FATAL_ERROR "XILINX_HLS environment variable not set")
+endif()
+
+set(VITIS_HLS_LIBS
+    ${VITIS_HLS_ROOT}/lib/lnx64.o/libhlsmath.so
+    ${VITIS_HLS_ROOT}/lnx64/tools/fpo_v7_1/libIp_floating_point_v7_1_bitacc_cmodel.so
+    ${VITIS_HLS_ROOT}/lnx64/tools/fpo_v7_1/libgmp.so
+    ${VITIS_HLS_ROOT}/lnx64/tools/fpo_v7_1/libmpfr.so
+    /opt/xilinx/xrt/lib/libxilinxopencl.so
+    stdc++
+    m
+    pthread
 )
 
 # 设置模块路径
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake
     ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/hlslib/cmake)
-    
+set(MM_KERNEL_SRC
+    ${CMAKE_SOURCE_DIR}/kernel/Compute.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/Memory.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/Top.cpp)
+
+# Tucker source files
+set(TUCKER_KERNEL_SRC
+    ${CMAKE_SOURCE_DIR}/kernel/TuckerLinear.cpp)
+
+# Tucker configuration options
+set(TUCKER_MAX_INPUT_DIM "1024" CACHE STRING "Maximum input dimension")
+set(TUCKER_MAX_OUTPUT_DIM "1024" CACHE STRING "Maximum output dimension") 
+set(TUCKER_MAX_BATCH_SIZE "256" CACHE STRING "Maximum batch size")
+set(TUCKER_MAX_RANK_1 "128" CACHE STRING "Maximum Tucker rank R1")
+set(TUCKER_MAX_RANK_2 "128" CACHE STRING "Maximum Tucker rank R2")
+
+# Add Tucker configuration to synthesis flags
+set(MM_SYNTHESIS_FLAGS "${MM_SYNTHESIS_FLAGS} \
+    -DTUCKER_MAX_INPUT_DIM=${TUCKER_MAX_INPUT_DIM} \
+    -DTUCKER_MAX_OUTPUT_DIM=${TUCKER_MAX_OUTPUT_DIM} \
+    -DTUCKER_MAX_BATCH_SIZE=${TUCKER_MAX_BATCH_SIZE} \
+    -DTUCKER_MAX_RANK_1=${TUCKER_MAX_RANK_1} \
+    -DTUCKER_MAX_RANK_2=${TUCKER_MAX_RANK_2}")
+
 # Target options 
 set(MM_PLATFORM "xilinx_u50_gen3x16_xdma_5_202210_1" CACHE STRING "Platform string for Vitis.")
 set(MM_TARGET_CLOCK "" CACHE STRING "Target clock for kernel (uses default is left empty).")
@@ -67,6 +96,11 @@ if(NOT MM_DATA_WIDTH_${MM_DATA_TYPE}) # Non-primitive data type
 endif()
 math(EXPR MM_KERNEL_WIDTH_N "${MM_DATA_WIDTH_${MM_DATA_TYPE}} * ${MM_PARALLELISM_N}")
 math(EXPR MM_KERNEL_WIDTH_M "${MM_DATA_WIDTH_${MM_DATA_TYPE}} * ${MM_PARALLELISM_M}")
+
+link_directories(
+    ${VITIS_HLS_ROOT}/lib/lnx64.o
+    ${VITIS_HLS_ROOT}/lnx64/tools/fpo_v7_1
+)
 
 # Validation checks
 math(EXPR MM_INNER_TILES "(${MM_MEMORY_TILE_SIZE_N} / ${MM_PARALLELISM_N}) * (${MM_MEMORY_TILE_SIZE_M} / ${MM_PARALLELISM_M})")
@@ -158,26 +192,86 @@ set(MM_KERNEL_SRC
     ${CMAKE_SOURCE_DIR}/kernel/Memory.cpp
     ${CMAKE_SOURCE_DIR}/kernel/Top.cpp)
 add_library(mmkernel ${MM_KERNEL_SRC})
-target_link_libraries(mmkernel ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(mmkernel 
+    PRIVATE ${CMAKE_THREAD_LIBS_INIT}
+)
 
 # Executables 
 add_executable(PrintSpecifications src/PrintSpecifications.cpp)
 
 # Software test
 add_executable(TestSimulation test/TestSimulation.cpp)
-target_link_libraries(TestSimulation ${Vitis_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${BLAS_LIBRARIES} ${Vitis_LIBRARIES} mmkernel)
+target_link_libraries(TestSimulation PRIVATE ${Vitis_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${BLAS_LIBRARIES} ${Vitis_LIBRARIES} mmkernel)
+
+# Half precision support
 if(MM_DATA_TYPE STREQUAL "half")
-  target_link_libraries(TestSimulation ${Vitis_FLOATING_POINT_LIBRARY})
+    add_definitions("-DMM_HALF_PRECISION")
+    target_link_libraries(mmkernel 
+        PRIVATE 
+        ${VITIS_HLS_LIBS}
+    )
+    target_link_libraries(TestSimulation 
+        PRIVATE 
+        ${VITIS_HLS_LIBS}
+    )
 endif()
+
+add_library(tuckerkernel ${TUCKER_KERNEL_SRC})
+target_link_libraries(tuckerkernel 
+    ${CMAKE_THREAD_LIBS_INIT}
+    mmkernel)  # Link against original matrix multiplication
+
+# Tucker testing
+add_executable(TestTuckerSimulation test/TestTuckerSimulation.cpp)
+target_link_libraries(TestTuckerSimulation 
+    ${Vitis_LIBRARIES} 
+    ${CMAKE_THREAD_LIBS_INIT} 
+    ${BLAS_LIBRARIES} 
+    tuckerkernel)  # Link against Tucker kernel
+
+if(MM_DATA_TYPE STREQUAL "half")
+    target_link_libraries(TestTuckerSimulation ${Vitis_FLOATING_POINT_LIBRARY})
+endif()
+
+# Make sure include directories are set correctly
+target_include_directories(mmkernel PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/hlslib/include
+    ${CMAKE_BINARY_DIR})
+
+target_include_directories(tuckerkernel PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/hlslib/include
+    ${CMAKE_BINARY_DIR})
+
+target_include_directories(TestTuckerSimulation PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/hlslib/include
+    ${CMAKE_BINARY_DIR})
+
+# Testing configuration
 if(MM_DYNAMIC_SIZES)
-  math(EXPR TEST_SIZE_N "2 * ${MM_MEMORY_TILE_SIZE_N} + 1")
-  math(EXPR TEST_SIZE_K "2 * ${MM_PARALLELISM_N} * ${MM_PARALLELISM_M} + ${MM_MEMORY_BUS_WIDTH_K} / ${MM_DATA_WIDTH_${MM_DATA_TYPE}}")
-  math(EXPR TEST_SIZE_M "2 * ${MM_MEMORY_TILE_SIZE_M} + ${MM_MEMORY_WIDTH_M}")
-  add_test(TestSimulation TestSimulation ${TEST_SIZE_N} ${TEST_SIZE_K} ${TEST_SIZE_M})
+    math(EXPR TEST_SIZE_N "2 * ${MM_MEMORY_TILE_SIZE_N} + 1")
+    math(EXPR TEST_SIZE_K "2 * ${MM_PARALLELISM_N} * ${MM_PARALLELISM_M} + ${MM_MEMORY_BUS_WIDTH_K} / ${MM_DATA_WIDTH_${MM_DATA_TYPE}}")
+    math(EXPR TEST_SIZE_M "2 * ${MM_MEMORY_TILE_SIZE_M} + ${MM_MEMORY_WIDTH_M}")
+    add_test(TestTuckerSimulation TestTuckerSimulation ${TEST_SIZE_N} ${TEST_SIZE_K} ${TEST_SIZE_M})
 else()
-  add_test(TestSimulation TestSimulation)
+    add_test(TestTuckerSimulation TestTuckerSimulation)
 endif()
-enable_testing()
+
+# 设置运行时链接路径
+set_target_properties(mmkernel PROPERTIES
+    INSTALL_RPATH "${VITIS_HLS_ROOT}/lib/lnx64.o;${VITIS_HLS_ROOT}/lnx64/tools/fpo_v7_1"
+    BUILD_WITH_INSTALL_RPATH TRUE
+    LINK_FLAGS "-Wl,--no-as-needed"
+)
+
+set_target_properties(TestSimulation PROPERTIES
+    INSTALL_RPATH "${VITIS_HLS_ROOT}/lib/lnx64.o;${VITIS_HLS_ROOT}/lnx64/tools/fpo_v7_1"
+    BUILD_WITH_INSTALL_RPATH TRUE
+    LINK_FLAGS "-Wl,--no-as-needed"
+)
+
 
 # Synthesis flags
 set(MM_SYNTHESIS_FLAGS "${MM_SYNTHESIS_FLAGS} -O3 -DMM_SYNTHESIS")
