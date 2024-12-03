@@ -26,9 +26,9 @@ struct TuckerParams {
     if (output_dim > TUCKER_MAX_OUTPUT_DIM) {
       throw std::runtime_error("Output dimension exceeds maximum");
     }
-    if (batch_size > TUCKER_MAX_BATCH_SIZE) {
-      throw std::runtime_error("Batch size exceeds maximum");
-    }
+    if (batch_size != 1) {
+            throw std::runtime_error("Batch size must be 1");
+        }
     if (rank_1 > TUCKER_MAX_RANK_1) {
       throw std::runtime_error("Rank R1 exceeds maximum"); 
     }

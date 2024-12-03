@@ -12,14 +12,13 @@
 // --------------------------------------------------------------------我改了这里---Jinsong
 using hlslib::Stream;
 ///using hls::stream;
+using namespace hlslib;
 constexpr int kSeed = 5; // For initializing matrices for testing
 constexpr unsigned kPipeDepth = 4;
 // 添加最大尺寸定义
 constexpr unsigned MAX_SIZE_N = 1024;  // Maximum size for N dimension
 constexpr unsigned MAX_SIZE_K = 1024;  // Maximum size for K dimension
 constexpr unsigned MAX_SIZE_M = 1024;  // Maximum size for M dimension
-
-using Data_t = float; // 或者其他指定的数据类型
 
 // Memory bus in K-dimension
 constexpr int kMemoryWidthK = kMemoryWidthBytesK / sizeof(Data_t);

@@ -370,7 +370,7 @@ void TuckerLinearKernel(
     #pragma HLS INTERFACE s_axilite port=return bundle=control
 
     const tucker::TuckerParams<Data_t> params(
-        input_dim, output_dim, batch_size, rank_1, rank_2
+        input_dim, output_dim, 1, rank_1, rank_2
     );
 
     if (init) {

@@ -8,11 +8,19 @@
 #ifdef MM_HALF_PRECISION
 #include "hls_half.h"
 #endif
-#include "hlslib/xilinx/Operators.h"
-
+#include "hlslib/xilinx/Operators.h" // 添加这个包含
+#include "hlslib/xilinx/DataPack.h"
 using uint8_t = unsigned char;
 
-using Data_t = ${MM_DATA_TYPE}; 
+// 根据CMake变量定义数据类型
+#cmakedefine MM_HALF_PRECISION
+
+#ifdef MM_HALF_PRECISION
+using Data_t = half;
+#else
+using Data_t = ${MM_DATA_TYPE};
+#endif
+
 constexpr int kMemoryWidthBytesN = ${MM_MEMORY_BUS_WIDTH_N};
 constexpr int kMemoryWidthBytesK = ${MM_MEMORY_BUS_WIDTH_K};
 constexpr int kMemoryWidthBytesM = ${MM_MEMORY_BUS_WIDTH_M};
@@ -20,6 +28,7 @@ constexpr int kMemoryWidthBytesM = ${MM_MEMORY_BUS_WIDTH_M};
 constexpr unsigned long kSizeN = ${MM_SIZE_N};
 constexpr unsigned long kSizeK = ${MM_SIZE_K};
 constexpr unsigned long kSizeM = ${MM_SIZE_M};
+constexpr unsigned long kSizeR2 = ${MM_SIZE_R2};
 #endif
 constexpr unsigned long kOuterTileSizeN = ${MM_MEMORY_TILE_SIZE_N};
 constexpr unsigned long kOuterTileSizeM = ${MM_MEMORY_TILE_SIZE_M};

@@ -22,10 +22,48 @@ set(VITIS_HLS_LIBS
     m
     pthread
 )
+include_directories(
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_BINARY_DIR}    # 包含生成的Config.h
+    ${VITIS_HLS_ROOT}/include
+)
+# CMakeLists.txt
+
+# 设置数据类型选项
+set(MM_DATA_TYPE "half" CACHE STRING "Matrix data type.")
+
+# 当选择half类型时开启MM_HALF_PRECISION
+if(MM_DATA_TYPE STREQUAL "half")
+    add_definitions(-DMM_HALF_PRECISION)
+    
+    # 确保包含half相关的库和头文件
+    include_directories(${VITIS_HLS_ROOT}/include)
+    link_libraries(${VITIS_HLS_ROOT}/lib/lnx64.o/libhlsmath.so)
+endif()
+
+# 配置头文件
+configure_file(
+    ${CMAKE_SOURCE_DIR}/include/Config.h.in
+    ${CMAKE_BINARY_DIR}/Config.h
+)
 
 # 设置模块路径
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake
     ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/hlslib/cmake)
+
+# 包含目录设置
+include_directories(
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_BINARY_DIR}
+    ${CMAKE_SOURCE_DIR}/hlslib/include  # 确保这一行存在
+    ${VITIS_HLS_ROOT}/include
+)
+
+# 配置头文件
+configure_file(
+    ${CMAKE_SOURCE_DIR}/include/Config.h.in
+    ${CMAKE_BINARY_DIR}/Config.h
+)
 set(MM_KERNEL_SRC
     ${CMAKE_SOURCE_DIR}/kernel/Compute.cpp
     ${CMAKE_SOURCE_DIR}/kernel/Memory.cpp
@@ -36,12 +74,13 @@ set(TUCKER_KERNEL_SRC
     ${CMAKE_SOURCE_DIR}/kernel/TuckerLinear.cpp)
 
 # Tucker configuration options
-set(TUCKER_MAX_INPUT_DIM "1024" CACHE STRING "Maximum input dimension")
-set(TUCKER_MAX_OUTPUT_DIM "1024" CACHE STRING "Maximum output dimension") 
-set(TUCKER_MAX_BATCH_SIZE "256" CACHE STRING "Maximum batch size")
-set(TUCKER_MAX_RANK_1 "128" CACHE STRING "Maximum Tucker rank R1")
-set(TUCKER_MAX_RANK_2 "128" CACHE STRING "Maximum Tucker rank R2")
-
+set(TUCKER_INPUT_DIM "1024" CACHE STRING "Input dimension I")
+set(TUCKER_OUTPUT_DIM "512" CACHE STRING "Output dimension O") 
+# Batch size固定为1
+set(TUCKER_BATCH_SIZE "1" CACHE STRING "Batch size fixed to 1")
+set(TUCKER_MAX_RANK_1 "128" CACHE STRING "First Tucker rank R1")
+set(TUCKER_MAX_RANK_2 "128" CACHE STRING "Second Tucker rank R2")
+set(MM_SIZE_R2 "64" CACHE STRING "Size of Tucker rank R2")
 # Add Tucker configuration to synthesis flags
 set(MM_SYNTHESIS_FLAGS "${MM_SYNTHESIS_FLAGS} \
     -DTUCKER_MAX_INPUT_DIM=${TUCKER_MAX_INPUT_DIM} \
@@ -291,7 +330,21 @@ if(MM_TWO_DIMMS)
 else()
   set(MM_PORT_MAPPING m_axi_gmem0:DDR[1] m_axi_gmem1:DDR[1] m_axi_gmem2:DDR[1])
 endif()
+# Hardware kernel
+add_vitis_kernel(TuckerKernel
+                KERNEL "TuckerLinearKernel"
+                FILES ${TUCKER_KERNEL_SRC}
+                HLS_FLAGS ${MM_SYNTHESIS_FLAGS}
+                INCLUDE_DIRS include
+                            hlslib/include
+                            ${CMAKE_BINARY_DIR})
 
+# 添加综合和实现目标
+add_vitis_program(TuckerKernel ${MM_PLATFORM} 
+                 CLOCK ${MM_TARGET_CLOCK}
+                 BUILD_FLAGS ${MM_VITIS_FLAGS}
+                 PROFILING ${MM_ENABLE_PROFILING}
+                 DEBUGGING ${MM_ENABLE_DEBUGGING})
 # Hardware kernel
 add_vitis_kernel(MatrixMultiplication
                  KERNEL "MatrixMultiplicationKernel"
